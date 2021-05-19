@@ -1,0 +1,117 @@
+FROM php:latest
+
+# Install dependencies and clear cache after.
+# Note: we do all the installation in one command, because mostly the packages dose not change that freequently
+# so the layer don't get rebuild and pulled often
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends --fix-missing \
+    git \
+    zip \
+    unzip \
+    mariadb-client \
+    libzip-dev \
+    zlib1g-dev \
+    libpng-dev \
+    supervisor \
+    libjpeg-dev \
+    libpng-dev \
+    locales \
+    exiftool \
+    libonig-dev \
+    ffmpeg \
+    cron \
+    nano \
+ && docker-php-ext-configure \
+    gd --with-jpeg \
+ && docker-php-ext-install \
+    -j$(nproc) \
+    pdo \
+    pdo_mysql \
+    mysqli \
+    gd \
+    zip \
+    pcntl \
+    exif \
+    mbstring \
+    pdo_mysql \
+    opcache \
+ && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+ && rm -rf /var/lib/apt/lists/*
+ #&& localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
+
+RUN pecl install swoole
+
+RUN docker-php-ext-enable swoole
+
+# Install dependencies and clear cache after.
+# Note: we do all the installation in one comand, because mostly the packages dose not change that freequently
+# so the layer dsn't get rebuild and pulled often
+
+WORKDIR /var/www/html
+
+CMD php artisan octane:install --server=swoole
+
+# Configure supervisor
+# Note: supervisor is running under root as you can see user=root, the superviser is used to start the laravel worker
+# it runs 2 processors as you can see numprocs=2, this can be changed if the processing needs to be speed up
+RUN \
+# Create cron
+echo "* * * * * cd /app && php artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/laravel-cron && \
+chmod 0644 /etc/cron.d/laravel-cron && \
+crontab /etc/cron.d/laravel-cron && \
+\
+if [ "$supervisor" = "true" ]; then \
+echo "\
+[program:laravel-worker] \n\
+process_name=%(program_name)s_%(process_num)02d \n\
+command=php /app/artisan queue:work --sleep=3 --tries=3 \n\
+autostart=true \n\
+autorestart=true \n\
+user=root \n\
+numprocs=2 \n\
+redirect_stderr=true \n\
+stdout_logfile=/app/storage/worker.log \n\
+stopwaitsecs=3600 \n\
+" > /etc/supervisor/conf.d/laravel-worker.conf \
+&& touch /var/run/supervisor.sock \
+&& chmod 777 /var/run/supervisor.sock \
+&& echo "#/bin/bash\n\
+/usr/bin/supervisord\
+" > /usr/bin/app_services.sh; \
+\
+else \
+\
+# When supervisor is turned off we will create a empty ssh file
+echo "#/bin/bash\n\
+" > /usr/bin/app_services.sh; \
+fi
+
+RUN \
+echo "\
+file_uploads = On\n\
+memory_limit = 2048M\n\
+upload_max_filesize = 2048M\n\
+upload_max_size = 2048M\n\
+post_max_size = 2048M\n\
+max_execution_time = 60\n\
+" > /usr/local/etc/php/conf.d/uploads.ini
+
+#COPY ./src/auth.json ./root/.composer/
+
+# Copy source code
+COPY ./src /var/www/html
+
+## Set memory_limit
+#ADD ./src/php/php.ini /usr/local/etc/php
+
+## make sure enable in deployment
+#COPY ./src/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+
+RUN composer install ;
+#--no-progress --no-scripts --optimize-autoloader --prefer-dist --no-dev
+
+RUN chmod -R 777 ./storage && mkdir -p /app/storage/logs && php artisan key:generate;
+
+#php  php artisan migrate && php artisan db:seed && php artisan key:generate
+
+CMD  php artisan octane:start
