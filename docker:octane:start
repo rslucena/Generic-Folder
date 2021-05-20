@@ -107,7 +107,8 @@ COPY ./src /var/www/html
 ## make sure enable in deployment
 #COPY ./src/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
-RUN composer install ;
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=compose
+
 #--no-progress --no-scripts --optimize-autoloader --prefer-dist --no-dev
 
 RUN chmod -R 777 ./storage && mkdir -p /app/storage/logs && php artisan key:generate;
