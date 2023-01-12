@@ -3,9 +3,9 @@
 
 ###### REDIS
 
+```php
 $Redis = new RedisService();
 
-```php
 $Redis->set('demo', 'demo');
 $Redis->get('demo');
 $Redis->del('demo');
