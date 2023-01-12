@@ -1,5 +1,17 @@
 > Where I put some excerpts that I use or that I have already used for backup
 
+
+###### REDIS
+
+$Redis = new RedisService();
+
+```php
+$Redis->set('demo', 'demo');
+$Redis->get('demo');
+$Redis->del('demo');
+$Redis->exists('demo');
+```
+
 ------------
 
 ###### Functions
